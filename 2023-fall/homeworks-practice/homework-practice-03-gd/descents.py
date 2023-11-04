@@ -203,12 +203,12 @@ class Adam(VanillaGradientDescent):
         # TODO: implement updating weights function
         self.m = self.beta_1 * self.m + (1 - self.beta_1) * gradient
         self.v = self.beta_2 * self.v + (1 - self.beta_2) * (gradient**2)
+        
+        self.iteration += 1
 
         m_ = self.m / (1 - self.beta_1**self.iteration)
         v_ = self.v / (1 - self.beta_2**self.iteration)
         
-        self.iteration += 1
-
         dw = - self.lr() / (np.sqrt(v_) + self.eps) * m_
         self.w += dw
 
