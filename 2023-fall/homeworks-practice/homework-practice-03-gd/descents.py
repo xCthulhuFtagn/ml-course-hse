@@ -28,7 +28,7 @@ class LossFunction(Enum):
     MAE = auto()
     LogCosh = auto()
     Huber = auto()
-
+    # R_Square = auto()
 
 class BaseDescent:
     """
@@ -74,8 +74,36 @@ class BaseDescent:
         :param y: targets array
         :return: loss: float
         """
+        y_p = self.predict(x)
         # TODO: implement loss calculation function
-        raise NotImplementedError('BaseDescent calc_loss function not implemented')
+        error = y_p - y
+        if self.loss_function == LossFunction.MSE :
+            return (error**2).mean()
+        elif self.loss_function == LossFunction.MAE :
+            return np.abs(error).mean()
+        elif self.loss_function == LossFunction.LogCosh :
+            # https://www.appsloveworld.com/numpy/100/13/avoiding-overflow-in-logcoshx
+             # s always has real part >= 0
+            s = np.sign(error) * error
+            p = np.exp(-2 * s)
+            return (s + np.log1p(p) - np.log(2)).mean()
+            # return np.log(np.cosh(y_p - y)).mean()
+        elif self.loss_function == LossFunction.Huber :
+            delta = 1.345
+            abs_error = np.abs(error)
+
+            sq_mask = abs_error <  delta
+            
+            squared_loss = (y_p - y)**2 / 2
+            absolute_loss = delta*np.abs(y_p - y)-(delta**2)/2
+            
+            abs_error[sq_mask] = squared_loss[sq_mask]
+            abs_error[~sq_mask] = absolute_loss[~sq_mask]
+            
+            return abs_error.mean()
+            # return np.mean((y_p - y)**2 / 2) if np.mean(np.abs(y_p - y)) <= delta else (delta*np.mean(np.abs(y_p - y))-(delta**2)/2)
+        # elif self.loss_function == LossFunction.R_Square :
+        #     return 1 - np.sum((y - y_p)**2) / y.var()
 
     def predict(self, x: np.ndarray) -> np.ndarray:
         """
@@ -84,8 +112,7 @@ class BaseDescent:
         :return: prediction: np.ndarray
         """
         # TODO: implement prediction function
-        raise NotImplementedError('BaseDescent predict function not implemented')
-
+        return x @ self.w
 
 class VanillaGradientDescent(BaseDescent):
     """
@@ -97,12 +124,17 @@ class VanillaGradientDescent(BaseDescent):
         :return: weight difference (w_{k + 1} - w_k): np.ndarray
         """
         # TODO: implement updating weights function
-        raise NotImplementedError('VanillaGradientDescent update_weights function not implemented')
+        dw =  - gradient * self.lr()
+        self.w += dw
+        return dw
 
     def calc_gradient(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         # TODO: implement calculating gradient function
-        raise NotImplementedError('VanillaGradientDescent calc_gradient function not implemented')
-
+        # if self.loss_function == LossFunction.MSE:
+        # print(np.any(np.isnan(self.w).any() | np.isinf(self.w).any()))
+        return -2 * (x.T @ (y - x @ self.w)) / len(x)
+        # elif self.loss_function == LossFunction.MAE:
+        #     return 
 
 class StochasticDescent(VanillaGradientDescent):
     """
@@ -119,8 +151,11 @@ class StochasticDescent(VanillaGradientDescent):
 
     def calc_gradient(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         # TODO: implement calculating gradient function
-        raise NotImplementedError('StochasticDescent calc_gradient function not implemented')
-
+        mask = np.zeros(len(x)).astype(bool)
+        mask[np.random.randint(0, len(x), self.batch_size)] = True
+        tmp_x = x[mask]
+        
+        return  - 2 * (tmp_x.T @ (y[mask] - tmp_x @ self.w)) / self.batch_size
 
 class MomentumDescent(VanillaGradientDescent):
     """
@@ -129,6 +164,7 @@ class MomentumDescent(VanillaGradientDescent):
 
     def __init__(self, dimension: int, lambda_: float = 1e-3, loss_function: LossFunction = LossFunction.MSE):
         super().__init__(dimension, lambda_, loss_function)
+        
         self.alpha: float = 0.9
 
         self.h: np.ndarray = np.zeros(dimension)
@@ -138,8 +174,10 @@ class MomentumDescent(VanillaGradientDescent):
         :return: weight difference (w_{k + 1} - w_k): np.ndarray
         """
         # TODO: implement updating weights function
-        raise NotImplementedError('MomentumDescent update_weights function not implemented')
+        h = self.alpha * self.h + self.lr() * gradient
 
+        self.w += -h
+        return -h
 
 class Adam(VanillaGradientDescent):
     """
@@ -147,7 +185,7 @@ class Adam(VanillaGradientDescent):
     """
 
     def __init__(self, dimension: int, lambda_: float = 1e-3, loss_function: LossFunction = LossFunction.MSE):
-        super().__init__(dimension, lambda_, loss_function)
+        super().__init__(dimension, lambda_, loss_function)        
         self.eps: float = 1e-8
 
         self.m: np.ndarray = np.zeros(dimension)
@@ -163,8 +201,18 @@ class Adam(VanillaGradientDescent):
         :return: weight difference (w_{k + 1} - w_k): np.ndarray
         """
         # TODO: implement updating weights function
-        raise NotImplementedError('Adagrad update_weights function not implemented')
+        self.m = self.beta_1 * self.m + (1 - self.beta_1) * gradient
+        self.v = self.beta_2 * self.v + (1 - self.beta_2) * (gradient**2)
 
+        m_ = self.m / (1 - self.beta_1**self.iteration)
+        v_ = self.v / (1 - self.beta_2**self.iteration)
+        
+        self.iteration += 1
+
+        dw = - self.lr() / (np.sqrt(v_) + self.eps) * m_
+        self.w += dw
+
+        return dw
 
 class BaseDescentReg(BaseDescent):
     """
