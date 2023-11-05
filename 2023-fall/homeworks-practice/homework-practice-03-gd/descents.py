@@ -29,6 +29,10 @@ class LossFunction(Enum):
     LogCosh = auto()
     Huber = auto()
     # R_Square = auto()
+    
+def R_square(y, y_p):
+    y_mean = y.mean()
+    return 1 - ((y - y_p)**2).sum() / y.var() / len(y)
 
 class BaseDescent:
     """
@@ -130,11 +134,10 @@ class VanillaGradientDescent(BaseDescent):
 
     def calc_gradient(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         # TODO: implement calculating gradient function
-        # if self.loss_function == LossFunction.MSE:
-        # print(np.any(np.isnan(self.w).any() | np.isinf(self.w).any()))
-        return -2 * (x.T @ (y - x @ self.w)) / len(x)
-        # elif self.loss_function == LossFunction.MAE:
-        #     return 
+        if self.loss_function == LossFunction.MSE:
+            return -2 * (x.T @ (y - x @ self.w)) / len(x)
+        elif self.loss_function == LossFunction.LogCosh:
+            return  - x.T @ (np.tanh(y - x @ self.w)) / len(x)
 
 class StochasticDescent(VanillaGradientDescent):
     """
@@ -231,7 +234,7 @@ class BaseDescentReg(BaseDescent):
         """
         Calculate gradient of loss function and L2 regularization with respect to weights
         """
-        l2_gradient: np.ndarray = np.zeros_like(x.shape[1])  # TODO: replace with L2 gradient calculation
+        l2_gradient: np.ndarray = (self.mu * self.w) / len(x) #np.zeros_like(x.shape[1])  # TODO: replace with L2 gradient calculation
 
         return super().calc_gradient(x, y) + l2_gradient * self.mu
 
@@ -240,7 +243,6 @@ class VanillaGradientDescentReg(BaseDescentReg, VanillaGradientDescent):
     """
     Full gradient descent with regularization class
     """
-
 
 class StochasticDescentReg(BaseDescentReg, StochasticDescent):
     """
