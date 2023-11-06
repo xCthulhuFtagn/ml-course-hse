@@ -265,17 +265,19 @@ class BaseDescentReg(BaseDescent):
         super().__init__(*args, **kwargs)
 
         self.mu = mu
-        self.l2_gradient = 0
+        self.first = True
 
     def calc_gradient(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         """
         Calculate gradient of loss function and L2 regularization with respect to weights
         """
-        ans = super().calc_gradient(x, y) + self.l2_gradient * self.mu
-        
-        self.l2_gradient = 2 * self.w / len(x) # TODO: replace with L2 gradient calculation
-
-        return ans
+        if self.first:
+            l2_gradient = 0
+            self.first = False
+        else:
+            l2_gradient = self.w
+            
+        return super().calc_gradient(x, y) + l2_gradient * self.mu
 
 
 class VanillaGradientDescentReg(BaseDescentReg, VanillaGradientDescent):
