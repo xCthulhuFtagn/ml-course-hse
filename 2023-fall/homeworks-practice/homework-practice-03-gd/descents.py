@@ -142,14 +142,15 @@ class VanillaGradientDescent(BaseDescent):
         elif self.loss_function == LossFunction.MAE:
             return - x.T @ (np.sign(y - x @ self.w)) / len(x)
         elif self.loss_function == LossFunction.Huber:
-            MSE_mod = - (x.T @ (y - x @ self.w)) / len(x)
-            MAE_mod = - (self.delta * x.T @ np.sign(y - x @ self.w)) / len(x)
             mask = np.abs(y - x @ self.w) <= self.delta
             
-            ans = MAE_mod
-            ans[mask] = MSE_mod[mask]
+            pre_build = (y - x @ self.w)
+            pre_build[mask] = (self.delta * np.sign(y - x @ self.w))[mask]
+
+            # MSE_mod = - (x.T @ (y - x @ self.w)) / len(x)
+            # MAE_mod = - (self.delta * x.T @ np.sign(y - x @ self.w)) / len(x)
             
-            return ans
+            return - (x.T @ pre_build) / len(x)
 
 class StochasticDescent(VanillaGradientDescent):
     """
