@@ -48,6 +48,7 @@ class BaseDescent:
         self.w: np.ndarray = np.random.rand(dimension)
         self.lr: LearningRate = LearningRate(lambda_=lambda_)
         self.loss_function: LossFunction = loss_function
+        self.delta = 0.2
 
     def step(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         return self.update_weights(self.calc_gradient(x, y))
@@ -138,6 +139,17 @@ class VanillaGradientDescent(BaseDescent):
             return -2 * (x.T @ (y - x @ self.w)) / len(x)
         elif self.loss_function == LossFunction.LogCosh:
             return  - x.T @ (np.tanh(y - x @ self.w)) / len(x)
+        elif self.loss_function == LossFunction.MAE:
+            return - x.T @ (np.sign(y - x @ self.w)) / len(x)
+        elif self.loss_function == LossFunction.Huber:
+            MSE_mod = - (x.T @ (y - x @ self.w)) / len(x)
+            MAE_mod = - (self.delta * x.T @ np.sign(y - x @ self.w)) / len(x)
+            mask = np.abs(y - x @ self.w) <= self.delta
+            
+            ans = MAE_mod
+            ans[mask] = MSE_mod[mask]
+            
+            return ans
 
 class StochasticDescent(VanillaGradientDescent):
     """
@@ -204,18 +216,41 @@ class Adam(VanillaGradientDescent):
         :return: weight difference (w_{k + 1} - w_k): np.ndarray
         """
         # TODO: implement updating weights function
+        self.iteration += 1
+        
         self.m = self.beta_1 * self.m + (1 - self.beta_1) * gradient
         self.v = self.beta_2 * self.v + (1 - self.beta_2) * (gradient**2)
         
-        self.iteration += 1
 
         m_ = self.m / (1 - self.beta_1**self.iteration)
         v_ = self.v / (1 - self.beta_2**self.iteration)
         
-        dw = - self.lr() / (np.sqrt(v_) + self.eps) * m_
+        dw = - self.lr() * m_ / (np.sqrt(v_) + self.eps)
         self.w += dw
 
         return dw
+    
+class AMSGrad(Adam):
+    def __init__(self, dimension: int, lambda_: float = 0.001, loss_function: LossFunction = LossFunction.MSE):
+        super().__init__(dimension, lambda_, loss_function)
+        self.v_ = np.zeros(dimension)
+        
+    def update_weights(self, gradient: np.ndarray) -> np.ndarray:
+        self.m = self.beta_1 * self.m + (1 - self.beta_1) * gradient
+        
+        self.iteration +=1
+        
+        self.beta_1 = self.beta_2 / self.iteration
+        
+        self.v = self.beta_2 * self.v + (1 - self.beta_2) * (gradient**2)
+        self.v_ = np.maximum(self.v_, self.v)
+        
+        dw = - self.lr() * self.m / (np.sqrt(self.v_) + self.eps)
+        
+        self.w += dw
+        
+        return dw
+        
 
 class BaseDescentReg(BaseDescent):
     """
@@ -270,7 +305,8 @@ def get_descent(descent_config: dict) -> BaseDescent:
         'full': VanillaGradientDescent if not regularized else VanillaGradientDescentReg,
         'stochastic': StochasticDescent if not regularized else StochasticDescentReg,
         'momentum': MomentumDescent if not regularized else MomentumDescentReg,
-        'adam': Adam if not regularized else AdamReg
+        'adam': Adam if not regularized else AdamReg,
+        'ams': AMSGrad
     }
 
     if descent_name not in descent_mapping:

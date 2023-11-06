@@ -37,10 +37,10 @@ class LinearRegression:
         for self.epoch in range(1, self.max_iter+1):
             step = self.descent.step(x, y)
 
-            check = step @ step
-            if np.isnan(step.sum()) or self.tolerance > step @ step: break
+            check = step@step
+            if np.isnan(step.sum()) or self.tolerance > step@step: break
             self.loss_history.append(self.descent.calc_loss(x, y))
-            self.descent.w += step
+            # self.descent.w += step
             
         self.loss_history.append(self.descent.calc_loss(x, y))
 
