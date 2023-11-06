@@ -190,10 +190,10 @@ class MomentumDescent(VanillaGradientDescent):
         :return: weight difference (w_{k + 1} - w_k): np.ndarray
         """
         # TODO: implement updating weights function
-        h = self.alpha * self.h + self.lr() * gradient
+        self.h = self.lr() * gradient + self.alpha * self.h
 
-        self.w += -h
-        return -h
+        self.w += -self.h
+        return -self.h
 
 class Adam(VanillaGradientDescent):
     """
@@ -265,14 +265,17 @@ class BaseDescentReg(BaseDescent):
         super().__init__(*args, **kwargs)
 
         self.mu = mu
+        self.l2_gradient = 0
 
     def calc_gradient(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         """
         Calculate gradient of loss function and L2 regularization with respect to weights
         """
-        l2_gradient: np.ndarray = (self.mu * self.w) / len(x) #np.zeros_like(x.shape[1])  # TODO: replace with L2 gradient calculation
+        ans = super().calc_gradient(x, y) + self.l2_gradient * self.mu
+        
+        self.l2_gradient = 2 * self.w / len(x) # TODO: replace with L2 gradient calculation
 
-        return super().calc_gradient(x, y) + l2_gradient * self.mu
+        return ans
 
 
 class VanillaGradientDescentReg(BaseDescentReg, VanillaGradientDescent):
