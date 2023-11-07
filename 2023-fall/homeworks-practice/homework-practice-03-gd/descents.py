@@ -106,9 +106,6 @@ class BaseDescent:
             abs_error[~sq_mask] = absolute_loss[~sq_mask]
             
             return abs_error.mean()
-            # return np.mean((y_p - y)**2 / 2) if np.mean(np.abs(y_p - y)) <= delta else (delta*np.mean(np.abs(y_p - y))-(delta**2)/2)
-        # elif self.loss_function == LossFunction.R_Square :
-        #     return 1 - np.sum((y - y_p)**2) / y.var()
 
     def predict(self, x: np.ndarray) -> np.ndarray:
         """
@@ -142,13 +139,9 @@ class VanillaGradientDescent(BaseDescent):
         elif self.loss_function == LossFunction.MAE:
             return - x.T @ (np.sign(y - x @ self.w)) / len(x)
         elif self.loss_function == LossFunction.Huber:
-            mask = np.abs(y - x @ self.w) <= self.delta
-            
+            mask = np.abs(y - x @ self.w) >= self.delta
             pre_build = (y - x @ self.w)
             pre_build[mask] = (self.delta * np.sign(y - x @ self.w))[mask]
-
-            # MSE_mod = - (x.T @ (y - x @ self.w)) / len(x)
-            # MAE_mod = - (self.delta * x.T @ np.sign(y - x @ self.w)) / len(x)
             
             return - (x.T @ pre_build) / len(x)
 
@@ -265,17 +258,14 @@ class BaseDescentReg(BaseDescent):
         super().__init__(*args, **kwargs)
 
         self.mu = mu
-        self.first = True
 
     def calc_gradient(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         """
         Calculate gradient of loss function and L2 regularization with respect to weights
         """
-        if self.first:
-            l2_gradient = 0
-            self.first = False
-        else:
-            l2_gradient = self.w
+
+        l2_gradient = self.w
+        l2_gradient[-1] = 0
             
         return super().calc_gradient(x, y) + l2_gradient * self.mu
 

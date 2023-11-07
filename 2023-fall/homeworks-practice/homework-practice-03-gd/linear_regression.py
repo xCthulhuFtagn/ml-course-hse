@@ -34,15 +34,14 @@ class LinearRegression:
         :return: self
         """
         # TODO: fit weights to x and y
+        self.loss_history.append(self.descent.calc_loss(x, y))
         for self.epoch in range(1, self.max_iter+1):
             step = self.descent.step(x, y)
 
-            check = step@step
-            if np.isnan(step.sum()) or self.tolerance > step@step: break
             self.loss_history.append(self.descent.calc_loss(x, y))
+            # check = step@step
+            if np.isnan(step.sum()) or self.tolerance > step@step: break
             # self.descent.w += step
-            
-        self.loss_history.append(self.descent.calc_loss(x, y))
 
         return self
 

@@ -42,42 +42,71 @@ x = column_transformer.fit_transform(x)
 x_train, x_validate, x_test = np.split(x.sample(frac=1, random_state=42), [int(.8*len(x)), int(.9*len(x))])
 y_train, y_validate, y_test = np.split(y.sample(frac=1, random_state=42), [int(.8*len(y)), int(.9*len(y))])
 
-statistics = pd.DataFrame(columns=['descent', 'iteration', 'error'])
-
 # YOUR CODE:
 from linear_regression import LinearRegression
-from descents import LossFunction
-from descents import R_square
+import descents
 
 descent_config = {
     'descent_name': 'name',
     'kwargs': {
-        'dimension': len(x_validate.columns),
+        'dimension': len(x_validate.columns)
     }
 }
 
-statistics = pd.DataFrame(columns=['descent', 'LossFunction', 'iteration', 'error'])
+statisticsVanilla = pd.DataFrame(columns=['descent', 'R^2', 'error', 'lr'])
+statisticsStochastic = pd.DataFrame(columns=['descent', 'R^2', 'error', 'lr'])
+statisticsMomentum = pd.DataFrame(columns=['descent', 'R^2', 'error', 'lr'])
+statisticsAdam = pd.DataFrame(columns=['descent', 'R^2', 'error', 'lr'])
+
 
 for descent_name in ['full', 'stochastic', 'momentum', 'adam']:
   descent_config['descent_name'] = descent_name
-  for l_f in [LossFunction.MAE, LossFunction.Huber]:
-    descent_config['kwargs']['loss_function'] = l_f
-    iterations = 0
-    min_err = np.inf
-    best_lr = 0
-    best_R_2 = 0
-    for lr in np.logspace(-5, -1,4):
-        descent_config['kwargs']['lambda_'] = lr
-        model = LinearRegression(
-        descent_config=descent_config,
-        max_iter=100000
-        ).fit(x_validate, y_validate)
+  iterations = 0
+  min_err = np.inf
+  best_lr = 0
+  for lr in np.logspace(-5, -1,4):
+    descent_config['kwargs']['lambda_'] = lr
+    descent_config['regularized'] = True
+    
+    for mu in np.logspace(-5, -1, 4):
+      descent_config['kwargs']['mu'] = mu
+      model = LinearRegression(
+          descent_config=descent_config,
+          max_iter=10000
+      ).fit(x_validate, y_validate)
 
-        curr_err = model.calc_loss(x_validate, y_validate)
-        if curr_err < min_err:
-            min_err = curr_err
-            best_lr = lr
-            iterations = model.epoch
-            best_R_2 = R_square(y_test, model.predict(x_test))
-        statistics.loc[len(statistics)] = [descent_name,l_f, model.epoch, curr_err]
-    print("For {} gradient descent the best lambda is {} with {} = {} for {} iterations and R^2 = {}".format(descent_name, best_lr, l_f, min_err, iterations, best_R_2))
+      curr_err = model.calc_loss(x_validate, y_validate)
+      y_p = model.predict(x_test)
+      R_2 = descents.R_square(y_test, y_p)
+      
+      
+      if isinstance(model.descent, descents.StochasticDescent):
+        statisticsStochastic.loc[len(statisticsStochastic)] = [model.descent.__class__, R_2, curr_err, lr]
+      elif isinstance(model.descent, descents.MomentumDescent):
+        statisticsMomentum.loc[len(statisticsMomentum)] = [model.descent.__class__, R_2, curr_err, lr]
+      elif isinstance(model.descent, descents.Adam):
+        statisticsAdam.loc[len(statisticsAdam)] = [model.descent.__class__, R_2, curr_err, lr]
+      elif isinstance(model.descent, descents.VanillaGradientDescent):
+        statisticsVanilla.loc[len(statisticsVanilla)] = [model.descent.__class__, R_2, curr_err, lr]
+      
+    descent_config['regularized'] = False
+    descent_config['kwargs'].pop('mu')
+    
+    model = LinearRegression(
+        descent_config=descent_config,
+        max_iter=10000
+    ).fit(x_validate, y_validate)
+    
+    curr_err = model.calc_loss(x_validate, y_validate)
+    y_p = model.predict(x_test)
+    R_2 = descents.R_square(y_test, y_p)
+    
+    if isinstance(model.descent, descents.StochasticDescent):
+      statisticsStochastic.loc[len(statisticsStochastic)] = [model.descent.__class__, R_2, curr_err, lr]
+    elif isinstance(model.descent, descents.MomentumDescent):
+      statisticsMomentum.loc[len(statisticsMomentum)] = [model.descent.__class__, R_2, curr_err, lr]
+    elif isinstance(model.descent, descents.Adam):
+      statisticsAdam.loc[len(statisticsAdam)] = [model.descent.__class__, R_2, curr_err, lr]
+    elif isinstance(model.descent, descents.VanillaGradientDescent):
+      statisticsVanilla.loc[len(statisticsVanilla)] = [model.descent.__class__, R_2, curr_err, lr]
+    
