@@ -1,8 +1,7 @@
 import numpy as np
 from collections import Counter
 
-
-def find_best_split(feature_vector, target_vector):
+def find_best_split(feature_vector : np.ndarray, target_vector : np.ndarray):
     """
     Под критерием Джини здесь подразумевается следующая функция:
     $$Q(R) = -\frac {|R_l|}{|R|}H(R_l) -\frac {|R_r|}{|R|}H(R_r)$$,
@@ -26,8 +25,47 @@ def find_best_split(feature_vector, target_vector):
     :return gini_best: оптимальное значение критерия Джини (число)
     """
     # ╰( ͡° ͜ʖ ͡° )つ──☆*:・ﾟ
+    features_sorted = np.sort(feature_vector)
+    unique_features = np.unique(features_sorted)
+    
+    targets_sorted = target_vector[feature_vector.argsort()]
 
-    pass
+    thresholds = (unique_features + np.roll(unique_features, -1))[:-1].astype(float) / 2
+    
+    # максимально странно, но работает :))))
+    masks = features_sorted >= thresholds[:,None] #https://stackoverflow.com/questions/51822589/compare-a-numpy-array-to-each-element-of-another-one
+    antimasks = ~masks
+    
+    # тут заставляю нампи генерить срезы таргета по каждой маске господебоже
+    def cut(mask):
+    # https://stackoverflow.com/questions/41368463/numpy-apply-along-axis-returns-error-setting-an-array-element-with-a-sequence
+        res = np.empty((), dtype=np.ndarray)
+        res[()] = targets_sorted[mask]
+        return res
+    
+    target_cuts_right = np.apply_along_axis(func1d=cut, arr=masks, axis=1)
+    target_cuts_left = np.apply_along_axis(func1d=cut, arr=antimasks, axis=1)
+    
+    left_lengths = np.array(list(map(len, target_cuts_left)))
+    right_lengths = np.array(list(map(len, target_cuts_right)))
+    
+    left_p_1 = np.array(list(map(sum, target_cuts_left))) / left_lengths
+    left_p_0 = 1 - left_p_1
+    
+    right_p_1 = np.array(list(map(sum, target_cuts_right))) / right_lengths
+    right_p_0 = 1 - right_p_1
+    
+    H_R_l = 1 - left_p_1**2 - left_p_0**2
+    H_R_r = 1 - right_p_1**2 - right_p_0**2
+    
+    ginis = - H_R_l * left_lengths / len(feature_vector) - H_R_r * right_lengths / len(feature_vector)
+    
+    threshold_best = thresholds[ginis.argmax()]
+    gini_best = ginis[ginis.argmax()]
+    
+    return thresholds, ginis, threshold_best, gini_best
+    
+    
 
 
 class DecisionTree:
