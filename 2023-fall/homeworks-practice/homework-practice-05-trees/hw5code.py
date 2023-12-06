@@ -36,15 +36,15 @@ def find_best_split(feature_vector : np.ndarray, target_vector : np.ndarray):
     masks = features_sorted >= thresholds[:,None] #https://stackoverflow.com/questions/51822589/compare-a-numpy-array-to-each-element-of-another-one
     antimasks = ~masks
     
-    # тут заставляю нампи генерить срезы таргета по каждой маске господебоже
-    def cut(mask):
-    # https://stackoverflow.com/questions/41368463/numpy-apply-along-axis-returns-error-setting-an-array-element-with-a-sequence
-        res = np.empty((), dtype=np.ndarray)
-        res[()] = targets_sorted[mask]
-        return res
+    # # тут заставляю нампи генерить срезы таргета по каждой маске господебоже
+    # def cut(mask):
+    # # https://stackoverflow.com/questions/41368463/numpy-apply-along-axis-returns-error-setting-an-array-element-with-a-sequence
+    #     res = np.empty((), dtype=np.ndarray)
+    #     res[()] = targets_sorted[mask]
+    #     return res
     
-    target_cuts_right = np.apply_along_axis(func1d=cut, arr=masks, axis=1)
-    target_cuts_left = np.apply_along_axis(func1d=cut, arr=antimasks, axis=1)
+    target_cuts_right = np.asarray(list(map(lambda mask: targets_sorted[mask], masks)), dtype=np.ndarray)
+    target_cuts_left = np.asarray(list(map(lambda mask: targets_sorted[mask], antimasks)), dtype=np.ndarray)
     
     left_lengths = np.array(list(map(len, target_cuts_left)))
     right_lengths = np.array(list(map(len, target_cuts_right)))
