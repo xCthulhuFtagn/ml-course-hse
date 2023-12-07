@@ -28,37 +28,26 @@ def find_best_split(feature_vector : np.ndarray, target_vector : np.ndarray):
     features_sorted = np.sort(feature_vector)
     unique_features = np.unique(features_sorted)
     
-    targets_sorted = target_vector[feature_vector.argsort()]
+    targets_sorted = np.array(target_vector[feature_vector.argsort()])
+    # targets_sorted.index = range(len(targets_sorted))
 
     thresholds = (unique_features + np.roll(unique_features, -1))[:-1].astype(float) / 2
     
-    # максимально странно, но работает :))))
-    masks = features_sorted >= thresholds[:,None] #https://stackoverflow.com/questions/51822589/compare-a-numpy-array-to-each-element-of-another-one
-    antimasks = ~masks
+    left_lengths = np.searchsorted(features_sorted, unique_features[:-1], side='right')
+    right_lengths = len(features_sorted) - left_lengths
     
-    # # тут заставляю нампи генерить срезы таргета по каждой маске господебоже
-    # def cut(mask):
-    # # https://stackoverflow.com/questions/41368463/numpy-apply-along-axis-returns-error-setting-an-array-element-with-a-sequence
-    #     res = np.empty((), dtype=np.ndarray)
-    #     res[()] = targets_sorted[mask]
-    #     return res
-    
-    target_cuts_right = np.asarray(list(map(lambda mask: targets_sorted[mask], masks)), dtype=np.ndarray)
-    target_cuts_left = np.asarray(list(map(lambda mask: targets_sorted[mask], antimasks)), dtype=np.ndarray)
-    
-    left_lengths = np.array(list(map(len, target_cuts_left)))
-    right_lengths = np.array(list(map(len, target_cuts_right)))
-    
-    left_p_1 = np.array(list(map(sum, target_cuts_left))) / left_lengths
+    left_cumsum = np.cumsum(targets_sorted)[left_lengths - 1]
+    left_p_1 = left_cumsum / left_lengths
     left_p_0 = 1 - left_p_1
     
-    right_p_1 = np.array(list(map(sum, target_cuts_right))) / right_lengths
+    right_p_1 = (np.sum(targets_sorted) - left_cumsum) / right_lengths
     right_p_0 = 1 - right_p_1
     
     H_R_l = 1 - left_p_1**2 - left_p_0**2
     H_R_r = 1 - right_p_1**2 - right_p_0**2
     
-    ginis = - H_R_l * left_lengths / len(feature_vector) - H_R_r * right_lengths / len(feature_vector)
+    ginis = np.array(-(H_R_l * left_lengths + H_R_r * right_lengths) / len(feature_vector))
+    # ginis.index = range(len(ginis))
     
     threshold_best = thresholds[ginis.argmax()]
     gini_best = ginis[ginis.argmax()]
@@ -104,12 +93,12 @@ class DecisionTree:
                     ratio[key] = current_count / current_click
                 sorted_categories = list(map(lambda x: x[1], sorted(ratio.items(), key=lambda x: x[1])))
                 categories_map = dict(zip(sorted_categories, list(range(len(sorted_categories)))))
-
+                # label encoding by ratio of y=1, everything ok
                 feature_vector = np.array(map(lambda x: categories_map[x], sub_X[:, feature]))
             else:
                 raise ValueError
 
-            if len(feature_vector) == 3:
+            if len(feature_vector) == 3: #maybe 1?
                 continue
 
             _, _, threshold, gini = find_best_split(feature_vector, sub_y)
@@ -142,11 +131,22 @@ class DecisionTree:
             raise ValueError
         node["left_child"], node["right_child"] = {}, {}
         self._fit_node(sub_X[split], sub_y[split], node["left_child"])
-        self._fit_node(sub_X[np.logical_not(split)], sub_y[split], node["right_child"])
+        # здесь исправил маску
+        self._fit_node(sub_X[~split], sub_y[~split], node["right_child"])
 
     def _predict_node(self, x, node):
         # ╰( ͡° ͜ʖ ͡° )つ──☆*:・ﾟ
-        pass
+        cur_node = node
+        while cur_node["type"] == "nonterminal":
+            feature = x[cur_node["feature_split"]]
+            split = "threshold" if self._feature_types["feature_best"] == "real" \
+                else "categories_split"
+            if feature < cur_node[split]:
+                cur_node = cur_node["left_child"]
+            else:
+                cur_node = cur_node["right_child"]
+                
+        return cur_node["class"]
 
     def fit(self, X, y):
         self._fit_node(X, y, self._tree)
