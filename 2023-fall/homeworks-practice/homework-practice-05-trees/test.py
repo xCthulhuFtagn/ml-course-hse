@@ -7,27 +7,28 @@ from sklearn.model_selection import train_test_split
 import seaborn as sns
 sns.set(style='whitegrid')
 
-import warnings
-warnings.filterwarnings('ignore')
+### ╰( ͡° ͜ʖ ͡° )つ──☆*:・ﾟ
+from sklearn.preprocessing import LabelEncoder
+from sklearn.compose import ColumnTransformer
+from random import randint
+from sklearn.metrics import accuracy_score
 
-students_df = pd.read_csv('/home/owner/Documents/DEV/ML/ml-course-hse/2023-fall/homeworks-practice/homework-practice-05-trees/students.csv')
+mushrooms = pd.read_csv('agaricus-lepiota.data')
+label_encoder = LabelEncoder()
+for column in mushrooms.columns:
+    mushrooms[column] = label_encoder.fit_transform(mushrooms[column])
 
-from hw5code import find_best_split
-best_feature = None
-best_score = 0
-statistics = pd.DataFrame(columns = ['threshold', 'gini', 'feature'])
-for feature, i in zip(students_df.columns[:-1], range(len(students_df.columns) - 1)):
-    thresholds, ginis, threshold_best, gini_best = find_best_split(students_df[feature], students_df[students_df.columns[-1]])
-    statistics = pd.concat([statistics, pd.DataFrame({'threshold' : thresholds, 'gini': ginis, 'feature': feature})], ignore_index = True)
+X = mushrooms.columns[1:]
+mask = np.repeat([True,False], len(mushrooms)//2)
+if len(mask) < len(mushrooms): mask = np.append(mask, randint(0, 1))
+np.random.shuffle(mask)
+mask = mask.astype(bool)
+X_train, Y_train = mushrooms[mask][X], mushrooms[mask][mushrooms.columns[0]]
+X_test, Y_test = mushrooms[~mask][X], mushrooms[~mask][mushrooms.columns[0]]
 
-fig = sns.lineplot(data = statistics, x = 'threshold', y = 'gini', hue = 'feature').get_figure()
-fig.savefig(f"fig.png")
+from hw5code import DecisionTree
+feature_types = ['categorical']*X_test.shape[1]
+tree = DecisionTree(feature_types=feature_types).fit(X_train, Y_train)
 
-
-# x = [1, 2, 3, 4, 5, 6, 99]
-# y = [0, 1, 1, 0, 0, 0, 1]
-
-# thresholds, ginis, threshold_best, gini_best = find_best_split(x, y)
-
-# print(thresholds)
-# print(ginis)
+Y_p = tree.predict(X_test)
+print(accuracy_score(Y_test, Y_p))

@@ -29,7 +29,6 @@ def find_best_split(feature_vector : np.ndarray, target_vector : np.ndarray):
     unique_features = np.unique(features_sorted)
     
     targets_sorted = np.array(target_vector[feature_vector.argsort()])
-    # targets_sorted.index = range(len(targets_sorted))
 
     thresholds = (unique_features + np.roll(unique_features, -1))[:-1].astype(float) / 2
     
@@ -68,37 +67,43 @@ class DecisionTree:
         self._min_samples_split = min_samples_split
         self._min_samples_leaf = min_samples_leaf
 
-    def _fit_node(self, sub_X, sub_y, node):
-        if np.all(sub_y != sub_y[0]):
+    def _fit_node(self, sub_X :np.ndarray, sub_y:np.ndarray, node):
+        # починил сменив на равно
+        sub_X = np.array(sub_X)
+        sub_y=np.array(sub_y)
+        
+        if np.all(sub_y == sub_y[0]):
             node["type"] = "terminal"
             node["class"] = sub_y[0]
             return
 
+        categories_map_best = None
         feature_best, threshold_best, gini_best, split = None, None, None, None
-        for feature in range(1, sub_X.shape[1]):
+        for feature in range(0, sub_X.shape[1]):
             feature_type = self._feature_types[feature]
             categories_map = {}
-
             if feature_type == "real":
                 feature_vector = sub_X[:, feature]
             elif feature_type == "categorical":
                 counts = Counter(sub_X[:, feature])
-                clicks = Counter(sub_X[sub_y == 1, feature])
+                clicks = Counter(sub_X[sub_y == 1,feature])
                 ratio = {}
                 for key, current_count in counts.items():
                     if key in clicks:
                         current_click = clicks[key]
                     else:
                         current_click = 0
-                    ratio[key] = current_count / current_click
-                sorted_categories = list(map(lambda x: x[1], sorted(ratio.items(), key=lambda x: x[1])))
+                    # починил формулу
+                    ratio[key] = current_click / current_count
+                    
+                sorted_categories = list(map(lambda x: x[0], sorted(ratio.items(), key=lambda x: x[1])))
                 categories_map = dict(zip(sorted_categories, list(range(len(sorted_categories)))))
                 # label encoding by ratio of y=1, everything ok
-                feature_vector = np.array(map(lambda x: categories_map[x], sub_X[:, feature]))
+                feature_vector = np.array(list(map(lambda x: categories_map[x], sub_X[:, feature])))
             else:
                 raise ValueError
 
-            if len(feature_vector) == 3: #maybe 1?
+            if len(np.unique(feature_vector)) == 1: #maybe 1?
                 continue
 
             _, _, threshold, gini = find_best_split(feature_vector, sub_y)
@@ -109,15 +114,16 @@ class DecisionTree:
 
                 if feature_type == "real":
                     threshold_best = threshold
-                elif feature_type == "Categorical":
-                    threshold_best = list(map(lambda x: x[0],
+                elif feature_type == "categorical":
+                    threshold_best = set(map(lambda x: x[0],
                                               filter(lambda x: x[1] < threshold, categories_map.items())))
+                    categories_map_best = categories_map
                 else:
                     raise ValueError
 
         if feature_best is None:
             node["type"] = "terminal"
-            node["class"] = Counter(sub_y).most_common(1)
+            node["class"] = Counter(sub_y).most_common(1)[0]
             return
 
         node["type"] = "nonterminal"
@@ -127,6 +133,7 @@ class DecisionTree:
             node["threshold"] = threshold_best
         elif self._feature_types[feature_best] == "categorical":
             node["categories_split"] = threshold_best
+            node["categories_map"] = categories_map_best
         else:
             raise ValueError
         node["left_child"], node["right_child"] = {}, {}
@@ -138,21 +145,35 @@ class DecisionTree:
         # ╰( ͡° ͜ʖ ͡° )つ──☆*:・ﾟ
         cur_node = node
         while cur_node["type"] == "nonterminal":
-            feature = x[cur_node["feature_split"]]
-            split = "threshold" if self._feature_types["feature_best"] == "real" \
-                else "categories_split"
-            if feature < cur_node[split]:
-                cur_node = cur_node["left_child"]
-            else:
-                cur_node = cur_node["right_child"]
-                
+            feature_best = cur_node["feature_split"]
+            feature = x[feature_best]
+            if self._feature_types[feature_best] == "real":
+                if feature < cur_node["threshold"]:
+                    cur_node = cur_node["left_child"]
+                else:
+                    cur_node = cur_node["right_child"]
+            elif self._feature_types[feature_best] == "categorical":
+                if feature not in cur_node["categories_map"].keys():
+                    left_p = len(cur_node["categories_split"]) / len(cur_node["categories_map"])
+                    if np.random.random_sample() < left_p:
+                        cur_node = cur_node["left_child"]
+                    else:
+                        cur_node = cur_node["right_child"]
+                else:
+                    if feature in cur_node["categories_split"]:
+                        cur_node = cur_node["left_child"]
+                    else:
+                        cur_node = cur_node["right_child"]
+            else: raise ValueError()                
         return cur_node["class"]
 
     def fit(self, X, y):
         self._fit_node(X, y, self._tree)
+        return self
 
     def predict(self, X):
         predicted = []
-        for x in X:
+        X_arr = np.array(X)
+        for x in X_arr:
             predicted.append(self._predict_node(x, self._tree))
         return np.array(predicted)
