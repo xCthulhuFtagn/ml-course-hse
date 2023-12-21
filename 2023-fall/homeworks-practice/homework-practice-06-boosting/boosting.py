@@ -3,15 +3,17 @@ from __future__ import annotations
 from collections import defaultdict
 
 import numpy as np
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, RocCurveDisplay, roc_curve, auc
 from sklearn.tree import DecisionTreeRegressor
+from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.model_selection import train_test_split
 
 
 def score(clf, x, y):
     return roc_auc_score(y == 1, clf.predict_proba(x)[:, 1])
 
 
-class Boosting:
+class Boosting(BaseEstimator, ClassifierMixin):
 
     def __init__(
             self,
@@ -21,6 +23,7 @@ class Boosting:
             subsample: float = 0.3,
             early_stopping_rounds: int = None,
             plot: bool = False,
+            threshold: float = 0.6
     ):
         self.base_model_class = DecisionTreeRegressor
         self.base_model_params: dict = {} if base_model_params is None else base_model_params
@@ -39,6 +42,7 @@ class Boosting:
             self.validation_loss = np.full(self.early_stopping_rounds, np.inf)
 
         self.plot: bool = plot
+        self.threshold = threshold
 
         self.history = defaultdict(list)
 
@@ -47,21 +51,27 @@ class Boosting:
         self.loss_derivative = lambda y, z: -y * self.sigmoid(-y * z)
 
     def fit_new_base_model(self, x, y, predictions):
-        # bootstrap
-        # https://stackoverflow.com/questions/54058718/why-random-sample-cant-handle-numpy-arrays-but-random-choices-can
-        rng = np.random.default_rng()
-        mask = np.random.choice([False, True], x.shape[0], p=[0.85, 0.15])
-        new_model = DecisionTreeRegressor().fit(x[mask, :], (y - predictions)[mask])
+    # bootstrap
+        idx = np.random.choice(
+            np.random.choice(np.arange(x.shape[0]),size=int(x.shape[0]*self.subsample), replace=False),
+            size = x.shape[0],
+            replace=True
+        )
+        new_model = self.base_model_class().fit(x[idx, :], -self.loss_derivative(y, predictions)[idx])
         self.gammas.append(self.find_optimal_gamma(y, predictions, new_model.predict(x)))
         self.models.append(new_model)
 
-    def fit(self, x_train, y_train, x_valid, y_valid):
+    def fit(self, x_train, y_train, x_valid = None, y_valid = None):
         """
         :param x_train: features array (train set)
         :param y_train: targets array (train set)
         :param x_valid: features array (validation set)
         :param y_valid: targets array (validation set)
         """
+        self.classes_ = np.unique(y_train)
+        if x_valid is None or y_valid is None:
+            x_train, x_valid, y_train, y_valid = train_test_split(x_train, y_train, test_size=0.5, random_state=1337)
+
         train_predictions = np.zeros(y_train.shape[0])
         valid_predictions = np.zeros(y_valid.shape[0])
         if self.early_stopping_rounds is not None: val_loss = np.ndarray((self.early_stopping_rounds,))
@@ -74,16 +84,24 @@ class Boosting:
             if self.early_stopping_rounds is not None:
                 val_loss[(est_cnt-1) % self.early_stopping_rounds] = self.loss_fn(y_valid, valid_predictions)
                 if est_cnt % self.early_stopping_rounds == 0:
-                    if (self.validation_loss - val_loss).sum() == 0: break
+                    if (self.validation_loss == val_loss).all(): break
                     else: self.validation_loss = val_loss
-        if self.plot: pass
+        if self.plot:
+            fpr, tpr, _ = roc_curve(y_train, train_predictions)
+            roc_auc = auc(fpr, tpr)
+            RocCurveDisplay(fpr=fpr, tpr=tpr, roc_auc=roc_auc).plot()
+        return self
             
     def predict_proba(self, x):
         pred = 0
         for gamma, model in zip(self.gammas, self.models):
             pred += gamma * model.predict(x)
         pred = self.sigmoid(pred)
-        return np.stack([pred, 1- pred], axis=1)
+        # for some reason pred is scalar and sometimes it's not
+        return np.stack([1-pred, pred], axis=1)
+    
+    def predict(self, x):
+        return int(self.predict_proba(x)[0] > self.threshold)
 
     def find_optimal_gamma(self, y, old_predictions, new_predictions) -> float:
         gammas = np.linspace(start=0, stop=1, num=100)
